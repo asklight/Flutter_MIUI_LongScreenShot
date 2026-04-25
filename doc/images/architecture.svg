@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="420" viewBox="0 0 1120 420">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#34495e"/>
+    </marker>
+    <style>
+      .box { fill: #f8fbff; stroke: #3a6ea5; stroke-width: 2; rx: 16; }
+      .native { fill: #fff8e8; stroke: #c47f20; }
+      .dart { fill: #eefaf0; stroke: #2f8a45; }
+      .cpp { fill: #f1f0ff; stroke: #5e55a6; }
+      .title { font: 700 18px sans-serif; fill: #1f2d3d; }
+      .text { font: 14px sans-serif; fill: #2c3e50; }
+      .small { font: 12px sans-serif; fill: #4d6575; }
+      .arrow { stroke: #34495e; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect x="20" y="45" width="210" height="310" class="box native"/>
+  <text x="125" y="82" text-anchor="middle" class="title">MIUI System</text>
+  <text x="125" y="125" text-anchor="middle" class="text">ContentPort</text>
+  <text x="125" y="150" text-anchor="middle" class="small">find scroll view</text>
+  <text x="125" y="175" text-anchor="middle" class="small">canScrollVertically</text>
+  <text x="125" y="200" text-anchor="middle" class="small">fake touch / scrollBy</text>
+  <text x="125" y="225" text-anchor="middle" class="small">segment screenshot</text>
+
+  <rect x="300" y="45" width="230" height="310" class="box native"/>
+  <text x="415" y="82" text-anchor="middle" class="title">Android Plugin</text>
+  <text x="415" y="125" text-anchor="middle" class="text">Control ScrollView</text>
+  <text x="415" y="150" text-anchor="middle" class="small">visible to MIUI</text>
+  <text x="415" y="175" text-anchor="middle" class="small">keeps native scrollY</text>
+  <text x="415" y="200" text-anchor="middle" class="small">proxies drawing cache</text>
+  <text x="415" y="225" text-anchor="middle" class="small">forwards native delta</text>
+
+  <rect x="600" y="45" width="210" height="310" class="box cpp"/>
+  <text x="705" y="82" text-anchor="middle" class="title">JNI / C++</text>
+  <text x="705" y="125" text-anchor="middle" class="text">FFI Bridge</text>
+  <text x="705" y="150" text-anchor="middle" class="small">Dart_PostCObject_DL</text>
+  <text x="705" y="175" text-anchor="middle" class="small">CountDownLatch callback</text>
+  <text x="705" y="200" text-anchor="middle" class="small">100ms timeout fallback</text>
+
+  <rect x="880" y="45" width="220" height="310" class="box dart"/>
+  <text x="990" y="82" text-anchor="middle" class="title">Flutter</text>
+  <text x="990" y="125" text-anchor="middle" class="text">MiuiLongScreenshot</text>
+  <text x="990" y="150" text-anchor="middle" class="small">select active target</text>
+  <text x="990" y="175" text-anchor="middle" class="small">read ScrollPosition</text>
+  <text x="990" y="200" text-anchor="middle" class="small">jumpTo logical offset</text>
+  <text x="990" y="225" text-anchor="middle" class="small">return consumed pixels</text>
+
+  <path d="M230 160 H300" class="arrow"/>
+  <text x="265" y="145" text-anchor="middle" class="small">view APIs</text>
+  <path d="M530 160 H600" class="arrow"/>
+  <text x="565" y="145" text-anchor="middle" class="small">sync call</text>
+  <path d="M810 160 H880" class="arrow"/>
+  <text x="845" y="145" text-anchor="middle" class="small">Dart port</text>
+
+  <path d="M880 255 H810" class="arrow"/>
+  <text x="845" y="278" text-anchor="middle" class="small">resultCallback</text>
+  <path d="M600 255 H530" class="arrow"/>
+  <text x="565" y="278" text-anchor="middle" class="small">latch release</text>
+  <path d="M300 255 H230" class="arrow"/>
+  <text x="265" y="278" text-anchor="middle" class="small">updated scrollY</text>
+</svg>

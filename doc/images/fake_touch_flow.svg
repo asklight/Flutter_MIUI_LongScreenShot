@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="520" viewBox="0 0 1040 520">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#34495e"/>
+    </marker>
+    <style>
+      .lane { fill: #fafafa; stroke: #d5dde5; stroke-width: 1.5; }
+      .step { fill: #fff; stroke: #3a6ea5; stroke-width: 2; rx: 10; }
+      .fix { fill: #effaf3; stroke: #2f8a45; }
+      .title { font: 700 16px sans-serif; fill: #1f2d3d; }
+      .text { font: 13px sans-serif; fill: #2c3e50; }
+      .small { font: 12px sans-serif; fill: #4d6575; }
+      .arrow { stroke: #34495e; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect x="30" y="45" width="220" height="420" class="lane"/>
+  <rect x="285" y="45" width="260" height="420" class="lane"/>
+  <rect x="580" y="45" width="190" height="420" class="lane"/>
+  <rect x="805" y="45" width="205" height="420" class="lane"/>
+
+  <text x="140" y="80" text-anchor="middle" class="title">MIUI</text>
+  <text x="415" y="80" text-anchor="middle" class="title">Control ScrollView</text>
+  <text x="675" y="80" text-anchor="middle" class="title">JNI / FFI</text>
+  <text x="907" y="80" text-anchor="middle" class="title">Flutter List</text>
+
+  <rect x="70" y="120" width="140" height="52" class="step"/>
+  <text x="140" y="145" text-anchor="middle" class="text">canScroll(1)</text>
+  <text x="140" y="163" text-anchor="middle" class="small">probe support</text>
+
+  <rect x="340" y="120" width="150" height="52" class="step"/>
+  <text x="415" y="145" text-anchor="middle" class="text">arm fake touch</text>
+  <text x="415" y="163" text-anchor="middle" class="small">2.5s window</text>
+
+  <rect x="835" y="120" width="145" height="52" class="step"/>
+  <text x="907" y="145" text-anchor="middle" class="text">read position</text>
+  <text x="907" y="163" text-anchor="middle" class="small">can scroll down</text>
+
+  <rect x="70" y="235" width="140" height="52" class="step"/>
+  <text x="140" y="260" text-anchor="middle" class="text">DOWN / MOVE</text>
+  <text x="140" y="278" text-anchor="middle" class="small">fake gesture</text>
+
+  <rect x="325" y="225" width="180" height="76" class="step fix"/>
+  <text x="415" y="250" text-anchor="middle" class="text">super.onTouchEvent</text>
+  <text x="415" y="270" text-anchor="middle" class="small">let native ScrollView</text>
+  <text x="415" y="288" text-anchor="middle" class="small">produce exact dy</text>
+
+  <rect x="610" y="235" width="130" height="52" class="step"/>
+  <text x="675" y="260" text-anchor="middle" class="text">scrollBy(dy)</text>
+  <text x="675" y="278" text-anchor="middle" class="small">sync bridge</text>
+
+  <rect x="835" y="225" width="145" height="76" class="step"/>
+  <text x="907" y="250" text-anchor="middle" class="text">jumpTo(target)</text>
+  <text x="907" y="270" text-anchor="middle" class="small">native px / dpr</text>
+  <text x="907" y="288" text-anchor="middle" class="small">return consumedY</text>
+
+  <rect x="325" y="355" width="180" height="64" class="step fix"/>
+  <text x="415" y="380" text-anchor="middle" class="text">syncScrollY</text>
+  <text x="415" y="400" text-anchor="middle" class="small">native scrollY = consumed</text>
+
+  <rect x="70" y="355" width="140" height="64" class="step"/>
+  <text x="140" y="380" text-anchor="middle" class="text">compare scrollY</text>
+  <text x="140" y="400" text-anchor="middle" class="small">continue or finish</text>
+
+  <path d="M210 146 H340" class="arrow"/>
+  <path d="M490 146 H835" class="arrow"/>
+  <path d="M835 165 H490" class="arrow"/>
+  <path d="M210 262 H325" class="arrow"/>
+  <path d="M505 262 H610" class="arrow"/>
+  <path d="M740 262 H835" class="arrow"/>
+  <path d="M835 292 H505" class="arrow"/>
+  <path d="M415 301 V355" class="arrow"/>
+  <path d="M325 387 H210" class="arrow"/>
+</svg>
