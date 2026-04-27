@@ -1,5 +1,4 @@
 # miui_long_screenshot
-Install on [pub.dev](https://pub.dev/packages/miui_long_screenshot)  
 
 `miui_long_screenshot` lets MIUI's system long screenshot tool drive a Flutter vertical scroll view. It does not generate screenshots by itself. Instead, it exposes a native Android `ScrollView` proxy that MIUI can discover and operate, then forwards the scroll command into Flutter.
 
@@ -39,10 +38,10 @@ MIUI does not know how to scroll a Flutter `ListView` because the Android view t
 The important components are:
 
 - `MiuiLongScreenshot`: Dart widget that registers the current page and owns the Flutter-side scroll logic.
-- `_MiuiLongScreenshotRegistry`: selects the visible active target, handles MethodChannel fallback, and receives FFI messages.
+- `_MiuiLongScreenshotRegistry`: selects the visible active target, updates native cached state through FFI, and receives FFI scroll messages.
 - `MiuiLongScreenshotPlugin`: Android plugin that installs the native control view and routes MIUI calls.
 - `MiuiLongScreenshotControlView`: transparent native `ScrollView` discovered by MIUI. It maintains native `scrollY`, forwards scroll distance to Flutter, and proxies drawing cache calls to the real Flutter view.
-- `NativeLongScreenshotJni` and `miui_long_screenshot.cpp`: synchronous bridge from Android to Dart using `Dart_PostCObject_DL` plus a Java callback latch.
+- `NativeLongScreenshotJni` and `miui_long_screenshot.cpp`: FFI bridge between Android and Dart. It posts scroll requests to Dart and lets Dart update Android's cached scroll state directly.
 
 ## Scroll Flow
 
@@ -52,13 +51,13 @@ The normal MIUI flow is:
 
 1. MIUI scans the Android view tree and finds the control `ScrollView`.
 2. MIUI calls `canScrollVertically(1)`.
-3. Android calls Dart through FFI. Dart checks the active Flutter `ScrollPosition`.
+3. Android returns the latest cached Dart state and refreshes it through FFI.
 4. If scrolling is possible, Android arms a short fake-touch window.
 5. MIUI sends a fake touch gesture to the native `ScrollView`.
 6. The control view lets `super.onTouchEvent()` calculate the native scroll delta.
 7. `onScrollChanged()` forwards the exact native `dy` to Dart.
 8. Dart converts native physical pixels to Flutter logical pixels and calls `jumpTo`.
-9. Dart returns the consumed native pixels and whether the list can still scroll down.
+9. Dart returns the consumed native pixels through FFI and updates the cached scroll state.
 10. Android syncs the control view's `scrollY` to the consumed distance so MIUI's bottom detection stays correct.
 
 This fake-touch path matters on MIUI versions that do not call `scrollBy()` directly. Manually interpreting `ACTION_DOWN` and `ACTION_MOVE` can over-scroll because MIUI sends both a large initial gesture and subsequent move deltas. The package uses native `ScrollView`'s own gesture math and forwards only the resulting `onScrollChanged` delta.
@@ -75,14 +74,17 @@ logicalDelta = nativeY / devicePixelRatio * scrollFactor
 
 ## Performance Notes
 
-The fast path is FFI:
+The fast path is FFI and does not use a Java latch:
 
-- Android calls native C++.
-- C++ posts a message to Dart with `Dart_PostCObject_DL`.
-- Dart calculates scroll state and calls exported `resultCallback`.
-- Java waits up to 100 ms with `CountDownLatch`.
+- Dart calls exported native FFI to keep Android's cached `canScroll` state fresh.
+- `canScrollVertically()` returns that cache immediately, then posts a lightweight FFI refresh request to Dart.
+- `scrollBy()` posts the native delta to Dart through `Dart_PostCObject_DL`.
+- Dart scrolls the active Flutter position, updates Android's cache through FFI, then calls exported `resultCallback` with the consumed pixels.
 
-There is a MethodChannel fallback for devices or builds where the native library is unavailable. During real MIUI long screenshot, logs should show `path=ffi` in `MiuiLongScreenshotPerf`.
+There is still a MethodChannel fallback for older builds where the native library
+is unavailable. During real MIUI long screenshot, logs should show
+`path=ffi_cached`, `path=ffi_post`, and `path=ffi_callback` in
+`MiuiLongScreenshotPerf`.
 
 The Android side waits briefly after scrolling before returning:
 

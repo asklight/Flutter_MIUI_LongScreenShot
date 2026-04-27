@@ -309,7 +309,12 @@ class _MiuiLongScreenshotRegistry {
 
   void updateNativeState() {
     if (!_isAndroid) return;
-    unawaited(_invokeNative('updateScrollState', _currentState()));
+    final state = _currentState();
+    if (_nativeBridge != null) {
+      _nativeBridge!.updateScrollState(state);
+      return;
+    }
+    unawaited(_invokeNative('updateScrollState', state));
   }
 
   Future<Object?> _handleNativeCall(MethodCall call) async {
@@ -341,11 +346,9 @@ class _MiuiLongScreenshotRegistry {
 
     switch (method) {
       case 'canScrollVertically':
-        final direction = args[1] as int;
-        final callbackId = args[3] as int;
         final target = _selectTarget();
-        final canScroll = target?.canScrollVertically(direction) ?? false;
-        _nativeBridge?.resultCallback(callbackId, canScroll ? 1 : 0);
+        final state = target?.collectState() ?? _emptyState();
+        _nativeBridge?.updateScrollState(state);
         break;
 
       case 'scrollBy':
@@ -353,11 +356,8 @@ class _MiuiLongScreenshotRegistry {
         final callbackId = args[3] as int;
         final target = _selectTarget();
         final state = target?.scrollByNativePixels(nativeY) ?? _emptyState();
-        unawaited(_invokeNative('updateScrollState', state));
-        _nativeBridge?.resultCallback(
-          callbackId,
-          _encodeScrollResult(state),
-        );
+        _nativeBridge?.updateScrollState(state);
+        _nativeBridge?.resultCallback(callbackId, _encodeScrollResult(state));
         break;
     }
   }
@@ -436,6 +436,12 @@ typedef _InitializeApiNative = ffi.IntPtr Function(ffi.Pointer<ffi.Void>);
 typedef _InitializeApiDart = int Function(ffi.Pointer<ffi.Void>);
 typedef _RegisterSendPortNative = ffi.Void Function(ffi.Int64);
 typedef _RegisterSendPortDart = void Function(int);
+typedef _UpdateScrollStateNative = ffi.Void Function(
+  ffi.Int32,
+  ffi.Int32,
+  ffi.Int32,
+);
+typedef _UpdateScrollStateDart = void Function(int, int, int);
 typedef _ResultCallbackNative = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _ResultCallbackDart = void Function(int, int);
 
@@ -443,13 +449,15 @@ class _MiuiLongScreenshotNativeBridge {
   _MiuiLongScreenshotNativeBridge._({
     required ReceivePort receivePort,
     required StreamSubscription<dynamic> subscription,
-    required _ResultCallbackDart resultCallback,
+    required _UpdateScrollStateDart updateScrollStateNative,
+    required this.resultCallback,
   })  : _receivePort = receivePort,
         _subscription = subscription,
-        resultCallback = resultCallback;
+        _updateScrollStateNative = updateScrollStateNative;
 
   final ReceivePort _receivePort;
   final StreamSubscription<dynamic> _subscription;
+  final _UpdateScrollStateDart _updateScrollStateNative;
   final _ResultCallbackDart resultCallback;
 
   static _MiuiLongScreenshotNativeBridge? tryCreate(
@@ -464,6 +472,10 @@ class _MiuiLongScreenshotNativeBridge {
       final registerSendPort = library
           .lookupFunction<_RegisterSendPortNative, _RegisterSendPortDart>(
         'registerSendPort',
+      );
+      final updateScrollState = library
+          .lookupFunction<_UpdateScrollStateNative, _UpdateScrollStateDart>(
+        'updateScrollState',
       );
       final resultCallback =
           library.lookupFunction<_ResultCallbackNative, _ResultCallbackDart>(
@@ -482,11 +494,20 @@ class _MiuiLongScreenshotNativeBridge {
       return _MiuiLongScreenshotNativeBridge._(
         receivePort: receivePort,
         subscription: subscription,
+        updateScrollStateNative: updateScrollState,
         resultCallback: resultCallback,
       );
     } catch (_) {
       return null;
     }
+  }
+
+  void updateScrollState(Map<String, Object?> state) {
+    _updateScrollStateNative(
+      state['hasTarget'] == true ? 1 : 0,
+      state['canScrollDown'] == true ? 1 : 0,
+      state['canScrollUp'] == true ? 1 : 0,
+    );
   }
 
   void dispose() {

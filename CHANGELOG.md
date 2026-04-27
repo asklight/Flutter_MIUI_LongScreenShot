@@ -2,4 +2,4 @@
 
 - Initial Android implementation for MIUI system long screenshot support.
 - Added `MiuiLongScreenshot` wrapper for Flutter vertical scroll views.
-- Added native Android `ScrollView` proxy, synchronous Dart FFI bridge, and MethodChannel fallback.
+- Added native Android `ScrollView` proxy, Dart FFI bridge, and MethodChannel fallback.

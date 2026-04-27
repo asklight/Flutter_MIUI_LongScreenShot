@@ -28,29 +28,19 @@ public final class NativeLongScreenshotJni {
 
     public static native void registerSendPort(long sendPort);
 
-    private static native void nativeCanScrollVertically(
+    private static native boolean nativeCanScrollVertically(
             int direction,
             boolean startScreenshot,
             int callbackId
     );
 
-    private static native void nativeScrollBy(int x, int y, int callbackId);
+    private static native boolean nativeScrollBy(int x, int y, int callbackId);
 
-    public static int canScrollVerticallyResult(int direction, boolean startScreenshot) {
-        if (!LOADED) return FlutterLongScreenshotCallbacks.AwaitCallback.RESULT_ERR;
-
-        FlutterLongScreenshotCallbacks.AwaitCallback callback =
-                FlutterLongScreenshotCallbacks.newCallback();
-        nativeCanScrollVertically(direction, startScreenshot, callback.id());
-        return callback.waitCallback().getResult();
+    public static boolean requestCanScrollVertically(int direction, boolean startScreenshot) {
+        return LOADED && nativeCanScrollVertically(direction, startScreenshot, 0);
     }
 
-    public static int scrollByResult(int x, int y) {
-        if (!LOADED) return FlutterLongScreenshotCallbacks.AwaitCallback.RESULT_ERR;
-
-        FlutterLongScreenshotCallbacks.AwaitCallback callback =
-                FlutterLongScreenshotCallbacks.newCallback();
-        nativeScrollBy(x, y, callback.id());
-        return callback.waitCallback().getResult();
+    public static boolean requestScrollBy(int x, int y, int callbackId) {
+        return LOADED && nativeScrollBy(x, y, callbackId);
     }
 }

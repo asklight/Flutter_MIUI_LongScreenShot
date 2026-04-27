@@ -34,8 +34,8 @@
   <text x="705" y="82" text-anchor="middle" class="title">JNI / C++</text>
   <text x="705" y="125" text-anchor="middle" class="text">FFI Bridge</text>
   <text x="705" y="150" text-anchor="middle" class="small">Dart_PostCObject_DL</text>
-  <text x="705" y="175" text-anchor="middle" class="small">CountDownLatch callback</text>
-  <text x="705" y="200" text-anchor="middle" class="small">100ms timeout fallback</text>
+  <text x="705" y="175" text-anchor="middle" class="small">cached state update</text>
+  <text x="705" y="200" text-anchor="middle" class="small">async scroll result</text>
 
   <rect x="880" y="45" width="220" height="310" class="box dart"/>
   <text x="990" y="82" text-anchor="middle" class="title">Flutter</text>
@@ -48,14 +48,14 @@
   <path d="M230 160 H300" class="arrow"/>
   <text x="265" y="145" text-anchor="middle" class="small">view APIs</text>
   <path d="M530 160 H600" class="arrow"/>
-  <text x="565" y="145" text-anchor="middle" class="small">sync call</text>
+  <text x="565" y="145" text-anchor="middle" class="small">JNI request</text>
   <path d="M810 160 H880" class="arrow"/>
   <text x="845" y="145" text-anchor="middle" class="small">Dart port</text>
 
   <path d="M880 255 H810" class="arrow"/>
-  <text x="845" y="278" text-anchor="middle" class="small">resultCallback</text>
+  <text x="845" y="278" text-anchor="middle" class="small">resultCallback / state FFI</text>
   <path d="M600 255 H530" class="arrow"/>
-  <text x="565" y="278" text-anchor="middle" class="small">latch release</text>
+  <text x="565" y="278" text-anchor="middle" class="small">cached state / scrollY</text>
   <path d="M300 255 H230" class="arrow"/>
   <text x="265" y="278" text-anchor="middle" class="small">updated scrollY</text>
 </svg>

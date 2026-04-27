@@ -7,8 +7,9 @@
 
 static Dart_Port g_send_port = 0;
 static JavaVM* g_java_vm = nullptr;
-static jclass g_callback_class = nullptr;
-static jmethodID g_handle_dart_call_method = nullptr;
+static jclass g_plugin_class = nullptr;
+static jmethodID g_update_scroll_state_method = nullptr;
+static jmethodID g_handle_scroll_result_method = nullptr;
 
 static void set_dart_string(Dart_CObject& dart_object, const char* value) {
     dart_object.type = Dart_CObject_kString;
@@ -35,6 +36,7 @@ static bool post_message(Dart_CObject* values[], intptr_t length) {
     message.type = Dart_CObject_kArray;
     message.value.as_array.length = length;
     message.value.as_array.values = values;
+
     const bool posted = Dart_PostCObject_DL(g_send_port, &message);
     if (!posted) {
         __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "Dart_PostCObject_DL failed");
@@ -64,14 +66,18 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
         return JNI_ERR;
     }
 
-    jclass local_callback_class =
-            env->FindClass("io/github/steven12138/miui_long_screenshot/FlutterLongScreenshotCallbacks");
-    if (local_callback_class != nullptr) {
-        g_callback_class = reinterpret_cast<jclass>(
-                env->NewGlobalRef(local_callback_class));
-        g_handle_dart_call_method = env->GetStaticMethodID(
-                g_callback_class,
-                "handleDartCall",
+    jclass local_plugin_class =
+            env->FindClass("io/github/steven12138/miui_long_screenshot/MiuiLongScreenshotPlugin");
+    if (local_plugin_class != nullptr) {
+        g_plugin_class = reinterpret_cast<jclass>(env->NewGlobalRef(local_plugin_class));
+        g_update_scroll_state_method = env->GetStaticMethodID(
+                g_plugin_class,
+                "updateCachedScrollStateFromDart",
+                "(ZZZ)V"
+        );
+        g_handle_scroll_result_method = env->GetStaticMethodID(
+                g_plugin_class,
+                "handleDartScrollResult",
                 "(II)V"
         );
     }
@@ -107,7 +113,7 @@ registerSendPort(int64_t send_port) {
     g_send_port = static_cast<Dart_Port>(send_port);
 }
 
-extern "C" JNIEXPORT void JNICALL
+extern "C" JNIEXPORT jboolean JNICALL
 Java_io_github_steven12138_miui_1long_1screenshot_NativeLongScreenshotJni_nativeCanScrollVertically(
         JNIEnv*,
         jclass,
@@ -131,10 +137,10 @@ Java_io_github_steven12138_miui_1long_1screenshot_NativeLongScreenshotJni_native
             &arg_start_screenshot,
             &arg_callback_id
     };
-    post_message(values, 4);
+    return post_message(values, 4) ? JNI_TRUE : JNI_FALSE;
 }
 
-extern "C" JNIEXPORT void JNICALL
+extern "C" JNIEXPORT jboolean JNICALL
 Java_io_github_steven12138_miui_1long_1screenshot_NativeLongScreenshotJni_nativeScrollBy(
         JNIEnv*,
         jclass,
@@ -158,21 +164,39 @@ Java_io_github_steven12138_miui_1long_1screenshot_NativeLongScreenshotJni_native
             &arg_y,
             &arg_callback_id
     };
-    post_message(values, 4);
+    return post_message(values, 4) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" __attribute__((visibility("default"))) void
+updateScrollState(int32_t has_target, int32_t can_scroll_down, int32_t can_scroll_up) {
+    JNIEnv* env = get_env();
+    if (env == nullptr || g_plugin_class == nullptr ||
+        g_update_scroll_state_method == nullptr) {
+        __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "updateScrollState skipped");
+        return;
+    }
+
+    env->CallStaticVoidMethod(
+            g_plugin_class,
+            g_update_scroll_state_method,
+            has_target != 0,
+            can_scroll_down != 0,
+            can_scroll_up != 0
+    );
 }
 
 extern "C" __attribute__((visibility("default"))) void
 resultCallback(int32_t callback_id, int32_t result) {
     JNIEnv* env = get_env();
-    if (env == nullptr || g_callback_class == nullptr ||
-        g_handle_dart_call_method == nullptr) {
+    if (env == nullptr || g_plugin_class == nullptr ||
+        g_handle_scroll_result_method == nullptr) {
         __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "resultCallback skipped");
         return;
     }
 
     env->CallStaticVoidMethod(
-            g_callback_class,
-            g_handle_dart_call_method,
+            g_plugin_class,
+            g_handle_scroll_result_method,
             callback_id,
             result
     );

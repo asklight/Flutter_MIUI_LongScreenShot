@@ -26,6 +26,8 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.lang.ref.WeakReference
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val PERF_TAG = "MiuiLongScreenshotPerf"
 private const val RAW_TAG = "MiuiLongScreenshotRaw"
@@ -37,13 +39,26 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     private var activity: Activity? = null
     private var controlView: MiuiLongScreenshotControlView? = null
     private var targetViewRef: WeakReference<View>? = null
+
+    @Volatile
     private var cachedCanScrollDown = false
+
+    @Volatile
     private var cachedCanScrollUp = false
+
+    @Volatile
     private var dartTargetReady = false
+
     private var firstScrollAfterScreenshot = true
+
+    @Volatile
     private var lastConsumedScrollY = 0
+
+    @Volatile
     private var zeroConsumedScrollCount = 0
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val nextScrollRequestId = AtomicInteger(1)
+    private val pendingScrolls = ConcurrentHashMap<Int, PendingScroll>()
 
     private val screenshotReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -74,6 +89,8 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     }
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        activePlugin = this
+        NativeLongScreenshotJni.isLoaded()
         channel = MethodChannel(binding.binaryMessenger, CHANNEL).apply {
             setMethodCallHandler(this@MiuiLongScreenshotPlugin)
         }
@@ -82,6 +99,9 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel?.setMethodCallHandler(null)
         channel = null
+        if (activePlugin === this) {
+            activePlugin = null
+        }
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -109,6 +129,7 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         uninstallControlView()
         unregisterScreenshotReceiver()
         unregisterDebugReceiver()
+        pendingScrolls.clear()
         activity = null
     }
 
@@ -182,39 +203,13 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
 
     override fun canScrollVerticallyFromDart(direction: Int): Boolean {
         val start = SystemClock.uptimeMillis()
-        if (dartTargetReady && NativeLongScreenshotJni.isLoaded()) {
-            val result = NativeLongScreenshotJni.canScrollVerticallyResult(
-                direction,
-                false
-            )
-            if (result != FlutterLongScreenshotCallbacks.AwaitCallback.RESULT_ERR) {
-                val canScroll = result == 1
-                val adjustedCanScroll = adjustCanScrollResult(direction, canScroll)
-                if (direction > 0) {
-                    cachedCanScrollDown = adjustedCanScroll
-                } else {
-                    cachedCanScrollUp = adjustedCanScroll
-                }
-                perf(
-                    "canScroll dir=$direction result=$adjustedCanScroll raw=$canScroll " +
-                        "path=ffi lastConsumed=$lastConsumedScrollY zeroCount=$zeroConsumedScrollCount " +
-                        "cost=${SystemClock.uptimeMillis() - start}ms"
-                )
-                return adjustedCanScroll
-            }
-            perf(
-                "canScroll dir=$direction path=ffi_timeout cachedDown=$cachedCanScrollDown " +
-                    "cachedUp=$cachedCanScrollUp cost=${SystemClock.uptimeMillis() - start}ms"
-            )
-        }
-
         requestDartScrollState(direction = direction, startScreenshot = false)
         val cached = adjustCanScrollResult(
             direction,
             if (direction > 0) cachedCanScrollDown else cachedCanScrollUp
         )
         perf(
-            "canScroll dir=$direction result=$cached path=method_cached " +
+            "canScroll dir=$direction result=$cached path=ffi_cached " +
                 "nativeLoaded=${NativeLongScreenshotJni.isLoaded()} ready=$dartTargetReady " +
                 "cost=${SystemClock.uptimeMillis() - start}ms"
         )
@@ -239,29 +234,36 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
 
         val start = SystemClock.uptimeMillis()
         if (NativeLongScreenshotJni.isLoaded()) {
-            val result = NativeLongScreenshotJni.scrollByResult(x, y)
-            if (result != FlutterLongScreenshotCallbacks.AwaitCallback.RESULT_ERR) {
-                val consumedY = decodeConsumedScrollY(result)
-                updateScrollConsumption(consumedY)
-                val correctedControlY = (controlScrollYBefore + consumedY).coerceAtLeast(0)
-                controlView?.syncScrollY(correctedControlY)
-                cachedCanScrollDown = adjustCanScrollResult(1, decodeCanScrollDown(result))
-                cachedCanScrollUp = correctedControlY > 0
-                val stabilizeMs = stabilizeAfterFlutterScroll(firstScroll)
+            val requestId = nextScrollRequestId.getAndIncrement()
+            pendingScrolls[requestId] = PendingScroll(
+                x = x,
+                y = y,
+                controlScrollYBefore = controlScrollYBefore,
+                source = source,
+                firstScroll = firstScroll,
+                startMs = start
+            )
+            if (NativeLongScreenshotJni.requestScrollBy(x, y, requestId)) {
                 perf(
-                    "scroll source=$source x=$x y=$y consumedY=$consumedY canDown=$cachedCanScrollDown " +
-                        "path=ffi first=$firstScroll stabilize=${stabilizeMs}ms " +
-                        "controlY=${controlView?.scrollY} zeroCount=$zeroConsumedScrollCount " +
-                        "cost=${SystemClock.uptimeMillis() - start}ms"
+                    "scroll source=$source x=$x y=$y path=ffi_post " +
+                        "requestId=$requestId cost=${SystemClock.uptimeMillis() - start}ms"
                 )
                 return
             }
-            perf(
-                "scroll source=$source x=$x y=$y path=ffi_timeout controlY=${controlView?.scrollY} " +
-                    "cost=${SystemClock.uptimeMillis() - start}ms"
-            )
+            pendingScrolls.remove(requestId)
         }
 
+        scrollByWithMethodChannel(x, y, controlScrollYBefore, source, firstScroll, start)
+    }
+
+    private fun scrollByWithMethodChannel(
+        x: Int,
+        y: Int,
+        controlScrollYBefore: Int,
+        source: String,
+        firstScroll: Boolean,
+        start: Long
+    ) {
         val currentChannel = channel ?: return
         currentChannel.invokeMethod(
             "scrollBy",
@@ -397,6 +399,14 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
     }
 
     private fun requestDartScrollState(direction: Int, startScreenshot: Boolean) {
+        if (NativeLongScreenshotJni.requestCanScrollVertically(direction, startScreenshot)) {
+            perf(
+                "requestState dir=$direction start=$startScreenshot path=ffi_post " +
+                    "down=$cachedCanScrollDown up=$cachedCanScrollUp"
+            )
+            return
+        }
+
         if (!dartTargetReady) return
 
         val currentChannel = channel ?: return
@@ -428,15 +438,47 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         )
     }
 
+    private fun updateCachedScrollStateFromNative(
+        hasTarget: Boolean,
+        canScrollDown: Boolean,
+        canScrollUp: Boolean
+    ) {
+        dartTargetReady = hasTarget
+        cachedCanScrollDown = adjustCanScrollResult(1, canScrollDown)
+        cachedCanScrollUp = canScrollUp
+    }
+
     private fun updateCachedScrollState(value: Any?) {
         val map = value as? Map<*, *> ?: return
-        dartTargetReady = map["hasTarget"] as? Boolean ?: dartTargetReady
-        cachedCanScrollDown = adjustCanScrollResult(
-            1,
-            map["canScrollDown"] as? Boolean ?: cachedCanScrollDown
+        updateCachedScrollStateFromNative(
+            hasTarget = map["hasTarget"] as? Boolean ?: dartTargetReady,
+            canScrollDown = map["canScrollDown"] as? Boolean ?: cachedCanScrollDown,
+            canScrollUp = map["canScrollUp"] as? Boolean ?: cachedCanScrollUp
         )
-        cachedCanScrollUp = map["canScrollUp"] as? Boolean ?: cachedCanScrollUp
         logFlutterScrollMetrics(map)
+    }
+
+    private fun handleNativeScrollResult(requestId: Int, encodedResult: Int) {
+        val pending = pendingScrolls.remove(requestId)
+        if (pending == null) {
+            perf("scroll result ignored requestId=$requestId reason=no_pending")
+            return
+        }
+
+        val consumedY = decodeConsumedScrollY(encodedResult)
+        updateScrollConsumption(consumedY)
+        val correctedControlY = (pending.controlScrollYBefore + consumedY).coerceAtLeast(0)
+        controlView?.syncScrollY(correctedControlY)
+        cachedCanScrollDown = adjustCanScrollResult(1, decodeCanScrollDown(encodedResult))
+        cachedCanScrollUp = correctedControlY > 0
+        val stabilizeMs = stabilizeAfterFlutterScroll(pending.firstScroll)
+        perf(
+            "scroll source=${pending.source} x=${pending.x} y=${pending.y} " +
+                "consumedY=$consumedY canDown=$cachedCanScrollDown path=ffi_callback " +
+                "first=${pending.firstScroll} stabilize=${stabilizeMs}ms " +
+                "controlY=${controlView?.scrollY} zeroCount=$zeroConsumedScrollCount " +
+                "cost=${SystemClock.uptimeMillis() - pending.startMs}ms"
+        )
     }
 
     private fun consumedNativeY(value: Any?): Int? {
@@ -448,7 +490,8 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         val view = controlView
         perf(
             "debug source=$source nativeLoaded=${NativeLongScreenshotJni.isLoaded()} " +
-                "ready=$dartTargetReady down=$cachedCanScrollDown up=$cachedCanScrollUp " +
+                "ready=$dartTargetReady pending=${pendingScrolls.size} " +
+                "down=$cachedCanScrollDown up=$cachedCanScrollUp " +
                 "first=$firstScrollAfterScreenshot controlY=${view?.scrollY} " +
                 "controlSize=${view?.width}x${view?.height} " +
                 "lastConsumed=$lastConsumedScrollY zeroCount=$zeroConsumedScrollCount"
@@ -512,6 +555,9 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         private const val MIN_CONSUMED_SCROLL_Y = 2
         private const val CHANNEL = "miui_long_screenshot"
 
+        @Volatile
+        private var activePlugin: MiuiLongScreenshotPlugin? = null
+
         private val SCREENSHOT_ACTIONS = listOf(
             "android.intent.action.SCREENSHOT",
             "miui.intent.TAKE_SCREENSHOT",
@@ -524,6 +570,27 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
         private fun perf(message: String) {
             if (ENABLE_PERF_LOG) {
                 Log.d(PERF_TAG, message)
+            }
+        }
+
+        @JvmStatic
+        fun updateCachedScrollStateFromDart(
+            hasTarget: Boolean,
+            canScrollDown: Boolean,
+            canScrollUp: Boolean
+        ) {
+            activePlugin?.updateCachedScrollStateFromNative(
+                hasTarget = hasTarget,
+                canScrollDown = canScrollDown,
+                canScrollUp = canScrollUp
+            )
+        }
+
+        @JvmStatic
+        fun handleDartScrollResult(requestId: Int, encodedResult: Int) {
+            val plugin = activePlugin ?: return
+            plugin.mainHandler.post {
+                plugin.handleNativeScrollResult(requestId, encodedResult)
             }
         }
 
@@ -545,6 +612,15 @@ class MiuiLongScreenshotPlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
             }
         }
     }
+
+    private data class PendingScroll(
+        val x: Int,
+        val y: Int,
+        val controlScrollYBefore: Int,
+        val source: String,
+        val firstScroll: Boolean,
+        val startMs: Long
+    )
 }
 
 class MiuiLongScreenshotControlView(
