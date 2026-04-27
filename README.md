@@ -1,4 +1,5 @@
 # miui_long_screenshot
+Install on [pub.dev](https://pub.dev/packages/miui_long_screenshot)  
 
 `miui_long_screenshot` lets MIUI's system long screenshot tool drive a Flutter vertical scroll view. It does not generate screenshots by itself. Instead, it exposes a native Android `ScrollView` proxy that MIUI can discover and operate, then forwards the scroll command into Flutter.
 
