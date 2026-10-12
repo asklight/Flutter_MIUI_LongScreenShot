@@ -43,6 +43,7 @@ class MiuiLongScreenshot extends StatefulWidget {
 class _MiuiLongScreenshotState extends State<MiuiLongScreenshot> {
   final GlobalKey _contentKey = GlobalKey();
   ScrollPosition? _position;
+  bool _active = true;
 
   @override
   void initState() {
@@ -58,7 +59,26 @@ class _MiuiLongScreenshotState extends State<MiuiLongScreenshot> {
   }
 
   @override
+  void deactivate() {
+    // mounted stays true during deactivation. Remove the target before its
+    // keyed subtree becomes inactive, including when several routes go away.
+    _active = false;
+    _position = null;
+    _MiuiLongScreenshotRegistry.instance.unregister(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _active = true;
+    _MiuiLongScreenshotRegistry.instance.register(this);
+    _syncAfterFrame();
+  }
+
+  @override
   void dispose() {
+    _active = false;
     _MiuiLongScreenshotRegistry.instance.unregister(this);
     super.dispose();
   }
@@ -161,6 +181,7 @@ class _MiuiLongScreenshotState extends State<MiuiLongScreenshot> {
   }
 
   Rect? globalRect() {
+    if (!_active) return null;
     final context = _contentKey.currentContext;
     final renderObject = context?.findRenderObject();
     if (renderObject is! RenderBox ||
@@ -177,6 +198,7 @@ class _MiuiLongScreenshotState extends State<MiuiLongScreenshot> {
   }
 
   void _markActiveAndUpdate() {
+    if (!_active) return;
     _syncPosition();
     _MiuiLongScreenshotRegistry.instance.markActive(this);
     _MiuiLongScreenshotRegistry.instance.updateNativeState();
@@ -184,13 +206,15 @@ class _MiuiLongScreenshotState extends State<MiuiLongScreenshot> {
 
   void _syncAfterFrame() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || !_active) return;
       _markActiveAndUpdate();
     });
   }
 
   void _syncPosition() {
-    _position = _positionFromController() ?? _positionFromSubtree();
+    _position = _active
+        ? _positionFromController() ?? _positionFromSubtree()
+        : null;
   }
 
   ScrollPosition? _positionFromController() {
@@ -385,7 +409,8 @@ class _MiuiLongScreenshotRegistry {
 
   _MiuiLongScreenshotState? _selectTarget() {
     final candidates = _targets
-        .where((target) => target.mounted && target.widget.enabled)
+        .where((target) =>
+            target.mounted && target._active && target.widget.enabled)
         .toList(growable: false)
         .reversed;
 
